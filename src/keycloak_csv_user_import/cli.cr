@@ -16,8 +16,16 @@ module KeycloakCsvUserImport
       run do |opts, args|
         begin
           logger = Logger.new(STDOUT, level: Logger::DEBUG)
-          csvparser = KeycloakCsvUserImport::CSVParser.new(logger)
           keycloak = KeycloakCsvUserImport::KeycloakAPI.new(logger, opts.server, opts.port, opts.username, "test", "school")
+
+          groups = if keycloak.has_token?
+                     keycloak.get_all_groups
+                   else
+                     keycloak.update_access_token
+                     keycloak.get_all_groups
+                   end
+
+          csvparser = KeycloakCsvUserImport::CSVParser.new(groups, logger)
 
           users = csvparser.parse(opts.input)
 

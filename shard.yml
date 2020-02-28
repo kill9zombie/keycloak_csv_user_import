@@ -12,6 +12,8 @@ dependencies:
   clim:
     github: at-grandpa/clim
     version: 0.10.0
+  retriable:
+    github: Sija/retriable.cr
 
 crystal: 0.33.0
 

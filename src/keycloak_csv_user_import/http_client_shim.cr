@@ -18,8 +18,20 @@ module KeycloakCsvUserImport
       {response.status_code, response.body}
     end
 
+    def delete(url, headers = nil)
+      response = @ua.delete(url, headers)
+
+      {response.status_code, response.body}
+    end
+
     def post(url, body, headers = nil)
       response = @ua.post(url, headers, body)
+
+      {response.status_code, response.body}
+    end
+
+    def put(url, body, headers = nil)
+      response = @ua.put(url, headers, body)
 
       {response.status_code, response.body}
     end

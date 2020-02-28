@@ -13,17 +13,21 @@ module KeycloakCsvUserImport
 
     @valid_groups : Array(String)
 
-    EXPECTED_HEADERS = ["username", "first name", "last name", "email", "group", "gender", "birth_day", "birth_month", "birth_year"]
+    VALID_GENDERS = ["M", "F", "O"]
+    VALID_HEADERS = ["first name", "last name", "email", "group", "gender", "birth_year"]
 
-    def initialize(@log = Logger.new("/dev/null"), @working_dir = "./", @valid_groups = ["be313ae0-a99a-4479-bfb4-6d24f913d8ee", "School Admins", "Teachers", "Students"])
+    def initialize(valid_group_representations, @log = Logger.new(nil))
+      @usernames_count = {} of Tuple(String, String) => UInt32
+
+      @valid_groups = valid_group_representations.map {|x| x[:name]}
     end
 
     def validate_header_line(input)
       current_headers = CSV.each_row(input).first.map {|x| x.downcase.strip}
-      if current_headers == EXPECTED_HEADERS
+      if current_headers == VALID_HEADERS
         {:ok, "Header line OK"}
       else
-        {:error, "Invalid header line found on the CSV file, expected: \"#{EXPECTED_HEADERS}\", but got: \"#{current_headers}\""}
+        {:error, "Invalid header line found on the CSV file, expected: \"#{VALID_HEADERS}\", but got: \"#{current_headers}\""}
       end
     end
 
@@ -34,7 +38,7 @@ module KeycloakCsvUserImport
       csv.each do |row|
         group = row["group"].strip
         if @valid_groups.includes?(group)
-          results << {:ok, "Group #{group} on line #{index} OK"}
+          results << {:ok, "Group \"#{group}\" on line #{index} OK"}
         else
           results << {:error, "Invalid group \"#{group}\" on line #{index}, should be one of: #{@valid_groups}"}
         end
@@ -43,42 +47,16 @@ module KeycloakCsvUserImport
       results
     end
 
-    def validate_birth_day(input)
+    def validate_gender(input)
       index = 1
       results = [] of {Symbol, String}
       csv = CSV.new(input, headers: true)
       csv.each do |row|
-        begin
-          day = row["birth_day"].to_i
-          if day > 0 && day < 32
-            results << {:ok, "Day #{day} OK"}
-          else
-            results << {:error, "Bad birth_day found on line #{index}, expected a number between 1 and 31, but got: #{day}"}
-          end
-        rescue ArgumentError
-          results << {:error, "Bad birth_day found on line #{index}, expected a number between 1 and 31, but found: #{row["birth_day"]}"}
-
-        end
-        index += 1
-      end
-      results
-    end
-
-    def validate_birth_month(input)
-      index = 1
-      results = [] of {Symbol, String}
-      csv = CSV.new(input, headers: true)
-      csv.each do |row|
-        begin
-          month = row["birth_month"].to_i
-          if month > 0 && month < 13
-            results << {:ok, "Month #{month} OK"}
-          else
-            results << {:error, "Bad birth_month found on line #{index}, expected a number between 1 and 12, but got: #{month}"}
-          end
-        rescue ArgumentError
-          results << {:error, "Bad birth_month found on line #{index}, expected a number between 1 and 12, but found: #{row["birth_month"]}"}
-
+        gender = row["gender"].strip
+        if VALID_GENDERS.includes?(gender)
+          results << {:ok, "Gender #{gender} on line #{index} OK"}
+        else
+          results << {:error, "Invalid gender entry \"#{gender}\" on line #{index}, should be one of: #{VALID_GENDERS}"}
         end
         index += 1
       end
@@ -95,24 +73,6 @@ module KeycloakCsvUserImport
           results << {:ok, "Year #{year} OK"}
         rescue ArgumentError
           results << {:error, "Bad birth_year found on line #{index}, expected a number but found: #{row["birth_year"]}"}
-
-        end
-        index += 1
-      end
-      results
-    end
-
-    def validate_birth_date(input)
-      index = 1
-      results = [] of {Symbol, String}
-      csv = CSV.new(input, headers: true)
-      csv.each do |row|
-        begin
-          time = Time.utc(row["birth_year"].to_i, row["birth_month"].to_i, row["birth_day"].to_i)
-          results << {:ok, "Birth date parsed as #{time}"}
-        rescue ArgumentError
-          results << {:error, "Couldn't parse the birth_day, birth_month, birth_year into a valid date on line #{index}"}
-
         end
         index += 1
       end
@@ -134,15 +94,27 @@ module KeycloakCsvUserImport
       validators = [
         ->(x : String) { validate_header_line(x) },
         ->(x : String) { validate_groups(x) },
-        ->(x : String) { validate_birth_day(x) },
-        ->(x : String) { validate_birth_month(x) },
-        ->(x : String) { validate_birth_year(x) },
-        ->(x : String) { validate_birth_date(x) }
+        ->(x : String) { validate_gender(x) },
+        ->(x : String) { validate_birth_year(x) }
       ]
 
       validators.map do |validator|
         validator.call(input)
       end.flatten
+    end
+
+    def generate_username(first_name, last_name, first_chars = 6, last_chars = 2)
+      first = first_name.downcase.delete(" \-")[0..(first_chars - 1)]
+      last = last_name.downcase.delete(" \-")[0..(last_chars - 1)]
+      username = "#{first}#{last}"
+      if @usernames_count.has_key?({first, last})
+        @usernames_count[{first, last}] += 1
+        "#{username}#{@usernames_count[{first, last}]}"
+      else
+        @usernames_count[{first, last}] = 0
+        username
+      end
+
     end
 
     def load_file(filename)
@@ -170,30 +142,26 @@ module KeycloakCsvUserImport
       csv.each do |row|
 
         attributes = {"gender" => row["gender"].strip,
-                      "birthday" => Time.utc(
-                          row["birth_year"].to_i,
-                          row["birth_month"].to_i,
-                          row["birth_day"].to_i
-                        ).to_rfc3339
+                      "birth_year" => row["birth_year"].strip
                      }
 
-        user = User.new(row["username"].strip,
-                        row["first name"].strip,
-                        row["last name"].strip,
-                        row["email"].strip,
-                        [row["group"].strip],
+        username = generate_username(row["first name"].scrub.strip,
+                                     row["last name"].scrub.strip,
+                                     1,
+                                     6)
+
+        user = User.new(username,
+                        row["first name"].scrub.strip,
+                        row["last name"].scrub.strip,
+                        row["email"].scrub.strip,
+                        [row["group"].scrub.strip],
                         attributes)
-                        # row["gender"].strip,
-                        # row["birth_day"].strip,
-                        # row["birth_month"].strip,
-                        # row["birth_year"].strip)
 
         @log.debug "Parsed user: #{user.username}"
 
         users << user
       end
       users
-
     end
 
     def parse(filename)
@@ -214,7 +182,7 @@ module KeycloakCsvUserImport
                     .select {|x| x[0] == :error}
                     .map {|x| x[1]}
 
-          raise CSVParserErrors.new("Error(s) detected while parsing the CSV input file", errors)
+          raise CSVParserErrors.new("Error(s) detected while parsing the CSV input file: #{errors.join(", ")}", errors)
         end
 
       when CSVParserErrors

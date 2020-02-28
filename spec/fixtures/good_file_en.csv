@@ -1,3 +1,4 @@
-username, first name, last name, group
-alice, alice, fleaks, students
-bob, bob, fleaks, students
+first name, last name, email, group, gender, birth_year
+alice, fleaks, alice@test.test, Students, F, 1985
+bob, fleaks, bob@test.test, Students, M, 2006
+carole, fleaks, carole@test.test, School Admins, O, 2008
