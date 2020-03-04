@@ -2,6 +2,7 @@ require "clim"
 require "logger"
 
 module KeycloakCsvUserImport
+  class CliError < Exception; end
   class Cli < Clim
 
     main do
@@ -10,6 +11,7 @@ module KeycloakCsvUserImport
       version KeycloakCsvUserImport::VERSION
       help short: "-h"
       option "-s SERVER", "--server=SERVER", type: String, desc: "The Keycloak server hostname or IP address", default: "login.localnet"
+      option "-r REALM", "--realm=REALM", type: String, desc: "The Keycloak realm", default: "school"
       option "-p PORT", "--port=PORT", type: Int32, desc: "The Keycloak server port", default: 8443
       option "-u USERNAME", "--username=USERNAME", type: String, desc: "Your Keycloak username.", required: true
       option "-i FILENAME", "--input=FILENAME", type: String, desc: "Input CSV filename.", required: true
@@ -25,7 +27,18 @@ module KeycloakCsvUserImport
                          end
 
           logger = Logger.new(STDOUT, level: logger_level)
-          keycloak = KeycloakCsvUserImport::KeycloakAPI.new(logger, opts.server, opts.port, opts.username, "test", "school")
+
+          password = if STDIN.tty?
+            print "Enter Password: "
+            STDIN.noecho &.gets.try &.chomp
+          else
+            STDIN.gets
+          end
+          puts
+
+          raise KeycloakCsvUserImport::CliError.new("A password must be provided") if password.is_a?(Nil)
+
+          keycloak = KeycloakCsvUserImport::KeycloakAPI.new(logger, opts.server, opts.port, opts.username, password, opts.realm)
 
           groups = if keycloak.has_token?
                      keycloak.get_all_groups
