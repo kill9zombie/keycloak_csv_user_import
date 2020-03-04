@@ -72,7 +72,7 @@ module KeycloakCsvUserImport
           year = row["birth_year"].to_i
           results << {:ok, "Year #{year} OK"}
         rescue ArgumentError
-          results << {:error, "Bad birth_year found on line #{index}, expected a number but found: #{row["birth_year"]}"}
+          results << {:error, "Invalid birth_year found on line #{index}, expected a number but found: #{row["birth_year"]}"}
         end
         index += 1
       end
@@ -126,7 +126,7 @@ module KeycloakCsvUserImport
           csv.each {|x| }
           input
         rescue e : CSV::MalformedCSVError
-          CSVParserErrors.new("Bad input file: #{e.message}")
+          CSVParserErrors.new("Invalid input file: #{e.message}")
         end
       else
         # TODO - improve the error message, could we do a "did you mean?" ?
@@ -182,7 +182,7 @@ module KeycloakCsvUserImport
                     .select {|x| x[0] == :error}
                     .map {|x| x[1]}
 
-          raise CSVParserErrors.new("Error(s) detected while parsing the CSV input file: #{errors.join(", ")}", errors)
+          raise CSVParserErrors.new("Error(s) detected while parsing the CSV input file: ", errors)
         end
 
       when CSVParserErrors

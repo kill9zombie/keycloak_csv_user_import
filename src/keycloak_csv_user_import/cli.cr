@@ -3,6 +3,7 @@ require "logger"
 
 module KeycloakCsvUserImport
   class Cli < Clim
+
     main do
       desc "INS User import tool."
       usage "ins-user-import [options] [arguments] ..."
@@ -13,9 +14,17 @@ module KeycloakCsvUserImport
       option "-u USERNAME", "--username=USERNAME", type: String, desc: "Your Keycloak username.", required: true
       option "-i FILENAME", "--input=FILENAME", type: String, desc: "Input CSV filename.", required: true
       option "-o FILENAME", "--output=FILENAME", type: String, desc: "Output filename", default: "-"
+      option "-d", "--debug", type: Bool, desc: "Debug mode"
       run do |opts, args|
         begin
-          logger = Logger.new(STDOUT, level: Logger::DEBUG)
+
+          logger_level = if opts.debug
+                           Logger::DEBUG
+                         else
+                           Logger::ERROR
+                         end
+
+          logger = Logger.new(STDOUT, level: logger_level)
           keycloak = KeycloakCsvUserImport::KeycloakAPI.new(logger, opts.server, opts.port, opts.username, "test", "school")
 
           groups = if keycloak.has_token?
@@ -31,11 +40,22 @@ module KeycloakCsvUserImport
 
           results = keycloak.add_users(users)
 
-          puts "Users: #{users}"
+          io = if opts.output == "-"
+                 STDOUT
+               else
+                 logger.debug "Writing to #{opts.output}"
+                 File.new(opts.output, "w+")
+               end
 
-          puts "Results: #{results}"
+          output = KeycloakCsvUserImport::Output.new
+
+          output.write(io, results)
+          io.close
         rescue e : KeycloakCsvUserImport::CSVParserErrors
-          STDERR.puts "Caught error: #{e}"
+          STDERR.puts e.message
+          e.errors.each do |err|
+            STDERR.puts "  #{err}"
+          end
         end
       end
     end

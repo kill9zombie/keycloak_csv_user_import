@@ -7,11 +7,12 @@ module KeycloakCsvUserImport
     @value : String
     @temporary : Bool
 
-    def initialize
+    def initialize(username)
       # See core/src/main/java/org/keycloak/representations/idm/CredentialRepresentation.java
       @type = "password"
       @temporary = true
-      @value = "test"
+      # @value = "test"
+      @value = username.chars.shuffle.join
     end
 
     JSON.mapping(

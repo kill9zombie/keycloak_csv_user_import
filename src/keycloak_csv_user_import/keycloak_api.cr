@@ -224,9 +224,11 @@ module KeycloakCsvUserImport
           end
           {user: user, created: true, message: "User \"#{user.first_name} #{user.last_name}\" created OK"}
         when 401
+          # TODO
           update_access_token
 
         when 409
+          # Username or email address already exist
           :todo
 
         else

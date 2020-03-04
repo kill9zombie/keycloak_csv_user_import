@@ -15,7 +15,7 @@ module KeycloakCsvUserImport
     @credentials : Array(KeycloakCsvUserImport::TemporaryPassword)
 
     def initialize(@username, @first_name, @last_name, @email, @groups = ["student"], @attributes = {} of String => String, @enabled = true)
-      @credentials = [TemporaryPassword.new]
+      @credentials = [TemporaryPassword.new(@username)]
     end
 
 
